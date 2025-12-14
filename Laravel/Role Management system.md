@@ -152,4 +152,4 @@ public function store(Request $request): RedirectResponse
 
 ---
 
-✅ **Exactly same code — only beautifully arranged**
+
