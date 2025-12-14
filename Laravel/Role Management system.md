@@ -1,4 +1,4 @@
-# Laravel এ Role System করার জনপ্রিয় উপায়
+# Laravel এ Role management System করার জনপ্রিয় উপায়
 ---
 
 ## 🗄️ Step 1: users table এ role add করা
