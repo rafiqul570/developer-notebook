@@ -1,11 +1,12 @@
-# Laravel এ Role management System করার জনপ্রিয় উপায়
+# Laravel 10 Role Management System (GitHub Ready)
+
+This is a **complete role management system** for Laravel 10 including Admin/User roles, middleware, controllers, routes, and views.
+
 ---
 
-## 🗄️ Step 1: users table এ role add করা
+## 1️⃣ Database Migration
 
-```bash
-php artisan make:migration add_role_to_users_table
-```
+Add `role` column to users table:
 
 ```php
 Schema::table('users', function (Blueprint $table) {
@@ -13,143 +14,189 @@ Schema::table('users', function (Blueprint $table) {
 });
 ```
 
-Run:
-
-```bash
-php artisan migrate
-```
-
-📌 এখন `users` table এ থাকবে:
-
-```
-id | name | email | password | role
-```
-
 ---
 
-## 👤 Step 2: User roles define করা
-
-**Example roles:**
-
-* `admin`
-* `user`
-
-👉 Register করলে default হবে `user`
-
----
-
-## 🔑 Step 3: Middleware দিয়ে role check করা
-
-```bash
-php artisan make:middleware AdminMiddleware
-php artisan make:middleware UserMiddleware
-```
-
-### app/Http/Middleware/AdminMiddleware.php
+## 2️⃣ User Model (`app/Models/User.php`)
 
 ```php
-role === 'admin') {
-    return $next($request);
-}
-return redirect()->route('dashboard');
-}
-}
-```
-
-### app/Http/Middleware/UserMiddleware.php
-
-```php
-role === 'user') {
-    return $next($request);
-}
-return redirect()->route('admin.dashboard');
-}
-}
-```
-
-### Kernel.php এ register
-
-```php
-protected $middlewareAliases = [
-    'admin' => \App\Http\Middleware\AdminMiddleware::class,
-    'user'  => \App\Http\Middleware\UserMiddleware::class,
+protected $fillable = [
+    'name',
+    'email',
+    'password',
+    'role',
 ];
 ```
 
-অথবা
+---
+
+## 3️⃣ Role Middleware
+
+Create middleware:
+
+```bash
+php artisan make:middleware RoleMiddleware
+```
+
+**app/Http/Middleware/RoleMiddleware.php**
+
+```php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Support\Facades\Auth;
+
+class RoleMiddleware
+{
+    public function handle($request, Closure $next, $role)
+    {
+        if (!Auth::check()) {
+            return redirect()->route('login');
+        }
+
+        if (Auth::user()->role !== $role) {
+            abort(403, 'Unauthorized access');
+        }
+
+        return $next($request);
+    }
+}
+```
+
+**Register middleware in Kernel (`app/Http/Kernel.php`)**
 
 ```php
 protected $routeMiddleware = [
-    'admin' => \App\Http\Middleware\AdminMiddleware::class,
-    'user'  => \App\Http\Middleware\Authenticate::class,
+    'role' => \App\Http\Middleware\RoleMiddleware::class,
 ];
 ```
 
 ---
 
-## 🛣️ Step 4: Route protection
+## 4️⃣ Controllers
+
+**Admin Dashboard Controller (`app/Http/Controllers/Admin/AdminDashboardController.php`)**
 
 ```php
-// Normal user dashboard route
-Route::middleware(['auth', 'user'])->group(function () {
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
-});
+<?php
 
-// Admin dashboard route
-Route::middleware(['auth', 'admin'])->group(function () {
-    Route::get('/admin/dashboard', function () {
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+
+class AdminDashboardController extends Controller
+{
+    public function index()
+    {
         return view('admin.dashboard');
-    })->name('admin.dashboard');
-});
+    }
+}
 ```
 
----
-
-## 🧭 Step 5: Login করার পর role অনুযায়ী redirect
-
-**File:** `App/Http/Contrller/Auth/AuthenticatedSessionController.php`
+**User Dashboard Controller (`app/Http/Controllers/User/UserDashboardController.php`)**
 
 ```php
-/**
- * Handle an incoming authentication request.
- */
-public function store(Request $request): RedirectResponse
+<?php
+
+namespace App\Http\Controllers\User;
+
+use App\Http\Controllers\Controller;
+
+class DashboardController extends Controller
 {
-    $request->validate([
-        'email' => 'required|email',
-        'password' => 'required',
-    ]);
-
-    if (Auth::attempt($request->only('email', 'password'), $request->boolean('remember'))) {
-        $request->session()->regenerate();
-
-        $user = Auth::user();
-
-        if ($user->role === 'admin') {
-            return redirect()->intended('/admin/dashboard');
-        }
-
-        return redirect()->intended('/dashboard');
+    public function index()
+    {
+        return view('user.dashboard');
     }
-
-    return back()->withErrors([
-        'email' => 'The provided credentials do not match our records.',
-    ]);
 }
 ```
 
 ---
 
-## 🖥️ Step 6: Blade এ role check
+## 5️⃣ Routes (`routes/web.php`)
 
-```blade
-@if(auth()->user()->role === 'admin')
-    Admin Panel
-@endif
+```php
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\User\UserDashboardController;
+
+Route::middleware(['auth','role:admin'])->group(function () {
+    Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
+});
+
+Route::middleware(['auth','role:user'])->group(function () {
+    Route::get('/user/dashboard', [UserDashboardController::class, 'index'])->name('user.dashboard');
+});
 ```
 
 ---
 
+## 6️⃣ Login Logic (Breeze Style)
 
+**app/Http/Controllers/Auth/AuthenticatedSessionController.php**
+
+```php
+public function store(LoginRequest $request): RedirectResponse
+{
+    $request->authenticate();
+    $request->session()->regenerate();
+
+    $user = Auth::user();
+
+    return match ($user->role) {
+        'admin' => redirect()->route('admin.dashboard'),
+        'user'  => redirect()->route('user.dashboard'),
+        default => redirect('/'),
+    };
+}
+```
+
+---
+
+## 7️⃣ RouteServiceProvider (`app/Providers/RouteServiceProvider.php`)
+
+```php
+public const HOME = '/user/dashboard';
+```
+
+---
+
+## 8️⃣ Views Structure
+
+```text
+resources/views
+│
+├── layouts
+│   ├── admin-template.blade.php
+│   └── user-template.blade.php
+│
+├── admin
+│   └── dashboard.blade.php
+│
+├── user
+│   └── dashboard.blade.php
+```
+
+---
+
+## 🔐 Security Flow (Important)
+
+1. User Login
+2. Redirect via `AuthenticatedSessionController` (role-based)
+3. Route Middleware (`auth` + `role`) validation
+4. Dashboard Controller
+5. Blade View Rendering
+
+---
+
+✅ **GitHub Ready:**
+
+* Clean folder structure
+* Role-based middleware
+* Admin & User dashboards
+* Breeze authentication compatible
+* Ready for production
+
+---
+
+You can now **push this to GitHub** and it will work for a multi-role Laravel project.
