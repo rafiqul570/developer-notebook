@@ -64,6 +64,33 @@ class RoleMiddleware
 }
 ```
 
+**app/Http/Middleware/RedirectIfAuthenticated.php**
+
+```php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Support\Facades\Auth;
+
+class RoleMiddleware
+{
+    public function handle($request, Closure $next, ...$guards)
+    {
+        if (Auth::check()) {
+            if (Auth::user()->role === 'admin') {
+                return redirect('/admin/dashboard');
+            }
+
+            return redirect('/user/dashboard');
+        }
+
+        return $next($request);
+    }
+}
+```
+
 **Register middleware in Kernel (`app/Http/Kernel.php`)**
 
 ```php
@@ -119,6 +146,12 @@ class DashboardController extends Controller
 ```php
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\User\UserDashboardController;
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', function () {
+        return view('auth.login');
+    })->name('login');
+});
 
 Route::middleware(['auth','role:admin'])->group(function () {
     Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
